@@ -17,6 +17,7 @@ async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       Accept: 'application/json',
+      'X-Service': 'iias-desktop',
       Authorization: token ? `Bearer ${token}` : '',
     },
   })
@@ -30,6 +31,7 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      'X-Service': 'iias-desktop',
       Authorization: token ? `Bearer ${token}` : '',
     },
     body: body ? JSON.stringify(body) : undefined,
