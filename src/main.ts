@@ -12,6 +12,7 @@ let page: 'timeline' | 'shopping' | 'settings' = 'timeline'
 let viewMode: string = 'dashboard'
 let message = ''
 let searchTimer: any = undefined
+let selectedImageFile: File | null = null
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -38,6 +39,23 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
+}
+
+async function uploadImage(file: File): Promise<string> {
+  const formData = new FormData()
+  formData.append('image', file)
+  const res = await fetch(`${API_BASE_URL}/images`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'X-Service': 'iias-desktop',
+      Authorization: token ? `Bearer ${token}` : '',
+    },
+    body: formData,
+  })
+  if (!res.ok) throw new Error(await res.text())
+  const data: { url: string } = await res.json()
+  return data.url
 }
 
 async function login(email: string, password: string) {
@@ -248,8 +266,9 @@ function renderShopping() {
       <h3 class="iias-card-title">アイテム追加</h3>
       <label class="iias-label">商品名</label>
       <input class="iias-input" type="text" id="item-name" placeholder="例：牛乳 1L" />
-      <label class="iias-label">画像URL</label>
-      <input class="iias-input" type="url" id="item-image" placeholder="https://..." />
+      <label class="iias-label">画像</label>
+      <input class="iias-input" type="file" id="item-image" accept="image/*" onchange="handleImageSelect(event)" />
+      <img id="image-preview" alt="" style="display: none; max-width: 120px; max-height: 80px; margin-top: 0.5rem; border: 1px solid #ff8a1c;" />
       <label class="iias-label">メモ</label>
       <input class="iias-input" type="text" id="item-memo" placeholder="確認用メモ" />
       <button class="iias-btn" style="width: 100%;" onclick="addShoppingItem()">追加</button>
@@ -346,15 +365,35 @@ async function saveSettingsFromForm() {
   }
 }
 
+function handleImageSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  selectedImageFile = file
+  const preview = document.getElementById('image-preview') as HTMLImageElement | null
+  if (preview) {
+    if (file) {
+      preview.src = URL.createObjectURL(file)
+      preview.style.display = 'block'
+    } else {
+      preview.src = ''
+      preview.style.display = 'none'
+    }
+  }
+}
+
 async function addShoppingItem() {
   const name = (document.getElementById('item-name') as HTMLInputElement).value
-  const imagePath = (document.getElementById('item-image') as HTMLInputElement).value
   const memo = (document.getElementById('item-memo') as HTMLInputElement).value
   if (!name) return
   try {
+    let imagePath: string | undefined
+    if (selectedImageFile) {
+      imagePath = await uploadImage(selectedImageFile)
+      selectedImageFile = null
+    }
     await apiPost('/shopping-items', {
       name,
-      image_path: imagePath || undefined,
+      image_path: imagePath,
       memo: memo || undefined,
       status: 'active',
     })
@@ -367,7 +406,7 @@ async function addShoppingItem() {
   }
 }
 
-Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, logout, saveSettingsFromForm, addShoppingItem })
+Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, logout, saveSettingsFromForm, addShoppingItem, handleImageSelect })
 
 async function init() {
   await loadUser()
