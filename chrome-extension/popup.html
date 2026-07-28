@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      width: 300px;
+      padding: 1rem;
+      background: #050505;
+      color: #ff8a1c;
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+    h1 {
+      font-size: 1rem;
+      margin: 0 0 0.75rem;
+      border-bottom: 1px solid #ff8a1c;
+      padding-bottom: 0.25rem;
+    }
+    label {
+      display: block;
+      margin-top: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.4rem;
+      background: #0a0a0a;
+      border: 1px solid #ff8a1c;
+      color: #ff8a1c;
+    }
+    button {
+      margin-top: 0.75rem;
+      width: 100%;
+      padding: 0.5rem;
+      background: #ff8a1c;
+      color: #050505;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #status {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>IIAS History Capture</h1>
+  <label for="api-base">API ベース URL</label>
+  <input id="api-base" type="url" value="http://localhost:8000/api" />
+  <label for="token">認証トークン</label>
+  <input id="token" type="text" placeholder="Bearer トークン" />
+  <button id="save">保存</button>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

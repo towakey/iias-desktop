@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "IIAS History Capture",
+  "version": "0.1.0",
+  "description": "IIAS へブラウザ履歴を自動送信する拡張機能",
+  "permissions": [
+    "history",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "IIAS History Capture"
+  }
+}
