@@ -159,11 +159,15 @@ function groupKey(date: string) {
 }
 
 function archiveItem(item: any) {
+  const tags = Array.isArray(item.tags) && item.tags.length
+    ? `<p class="iias-card-meta">タグ: ${item.tags.map((t: any) => t.name).join(', ')}</p>`
+    : ''
   return `
     <div class="iias-card">
       <h3 class="iias-card-title">${item.title || '(タイトルなし)'}</h3>
       ${item.url ? `<p class="iias-card-meta">${item.url}</p>` : ''}
       ${item.memo ? `<p class="iias-card-meta">${item.memo}</p>` : ''}
+      ${tags}
       <p class="iias-card-meta">${formatDate(item.recorded_at)}</p>
     </div>
   `
