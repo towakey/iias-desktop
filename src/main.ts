@@ -242,13 +242,24 @@ function renderShopping() {
     <header class="iias-header">
       <h2 class="iias-title">購買リスト</h2>
     </header>
+    <div class="iias-card iias-form" style="margin-bottom: 1rem;">
+      <h3 class="iias-card-title">アイテム追加</h3>
+      <label class="iias-label">商品名</label>
+      <input class="iias-input" type="text" id="item-name" placeholder="例：牛乳 1L" />
+      <label class="iias-label">画像URL</label>
+      <input class="iias-input" type="url" id="item-image" placeholder="https://..." />
+      <label class="iias-label">メモ</label>
+      <input class="iias-input" type="text" id="item-memo" placeholder="確認用メモ" />
+      <button class="iias-btn" style="width: 100%;" onclick="addShoppingItem()">追加</button>
+    </div>
     <div class="iias-shopping-list">
       ${shoppingItems.length === 0 ? '<div class="iias-card" style="opacity: 0.7;">アイテムがありません。</div>' : ''}
       ${shoppingItems.map((item) => `
         <div class="iias-card" style="display: flex; align-items: center; gap: 1rem; ${item.status === 'purchased' ? 'opacity: 0.35;' : ''}">
           <div style="flex: 1;">
             <h3 class="iias-card-title">${item.name}</h3>
-            ${item.note ? `<p class="iias-card-meta">${item.note}</p>` : ''}
+            ${item.memo ? `<p class="iias-card-meta">${item.memo}</p>` : ''}
+            ${item.image_path ? `<img src="${item.image_path}" alt="" style="max-width: 120px; max-height: 80px; margin-top: 0.5rem; border: 1px solid #ff8a1c;" />` : ''}
           </div>
           ${item.status === 'purchased'
             ? `<button class="iias-btn" onclick="restoreItem(${item.id})">取り消し</button>`
@@ -333,7 +344,28 @@ async function saveSettingsFromForm() {
   }
 }
 
-Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, logout, saveSettingsFromForm })
+async function addShoppingItem() {
+  const name = (document.getElementById('item-name') as HTMLInputElement).value
+  const imagePath = (document.getElementById('item-image') as HTMLInputElement).value
+  const memo = (document.getElementById('item-memo') as HTMLInputElement).value
+  if (!name) return
+  try {
+    await apiPost('/shopping-items', {
+      name,
+      image_path: imagePath || undefined,
+      memo: memo || undefined,
+      status: 'active',
+    })
+    message = ''
+    await loadShopping()
+    render()
+  } catch (e: any) {
+    message = '追加に失敗しました'
+    render()
+  }
+}
+
+Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, logout, saveSettingsFromForm, addShoppingItem })
 
 async function init() {
   await loadUser()
