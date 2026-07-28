@@ -8,13 +8,14 @@ let user: { id: number; name: string; email: string } | null = null
 let archives: any[] = []
 let shoppingItems: any[] = []
 let settings: Record<string, any> = {}
-let page: 'timeline' | 'shopping' | 'stats' | 'settings' = 'timeline'
+let page: 'timeline' | 'shopping' | 'stats' | 'regular' | 'settings' = 'timeline'
 let viewMode: string = 'dashboard'
 let message = ''
 let searchTimer: any = undefined
 let selectedImageFile: File | null = null
 let shoppingTab: 'active' | 'purchased' = 'active'
 let shoppingStats: any = null
+let regularItems: any[] = []
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -115,6 +116,10 @@ async function loadShopping(status = shoppingTab) {
   shoppingTab = status as 'active' | 'purchased'
 }
 
+async function loadRegularItems() {
+  regularItems = await apiGet<any[]>('/regular-items')
+}
+
 async function loadSettings() {
   settings = await apiGet<Record<string, any>>('/settings')
   viewMode = settings.view_mode || 'dashboard'
@@ -189,6 +194,7 @@ function render() {
         <a class="iias-nav-link ${page === 'timeline' ? 'active' : ''}" onclick="setPage('timeline')">タイムライン</a>
         <a class="iias-nav-link ${page === 'shopping' ? 'active' : ''}" onclick="setPage('shopping')">購買リスト</a>
         <a class="iias-nav-link ${page === 'stats' ? 'active' : ''}" onclick="setPage('stats')">統計</a>
+        <a class="iias-nav-link ${page === 'regular' ? 'active' : ''}" onclick="setPage('regular')">定番</a>
         <a class="iias-nav-link ${page === 'settings' ? 'active' : ''}" onclick="setPage('settings')">設定</a>
       </nav>
       <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid #ff8a1c;">
@@ -200,6 +206,7 @@ function render() {
       ${page === 'timeline' ? renderTimeline() : ''}
       ${page === 'shopping' ? renderShopping() : ''}
       ${page === 'stats' ? renderStats() : ''}
+      ${page === 'regular' ? renderRegular() : ''}
       ${page === 'settings' ? renderSettings() : ''}
     </main>
   `
@@ -207,6 +214,7 @@ function render() {
   if (page === 'timeline') bindTimeline()
   if (page === 'shopping') bindShopping()
   if (page === 'stats') bindStats()
+  if (page === 'regular') bindRegular()
   if (page === 'settings') bindSettings()
 }
 
@@ -357,6 +365,42 @@ function bindStats() {
   // onclick handlers are used instead
 }
 
+function renderRegular() {
+  return `
+    <header class="iias-header">
+      <h2 class="iias-title">定番商品</h2>
+    </header>
+    <div class="iias-card iias-form" style="margin-bottom: 1rem;">
+      <h3 class="iias-card-title">定番商品登録</h3>
+      <label class="iias-label">商品名</label>
+      <input class="iias-input" type="text" id="regular-name" placeholder="例：牛乳" />
+      <label class="iias-label">価格（円）</label>
+      <input class="iias-input" type="number" id="regular-price" placeholder="例：200" />
+      <label class="iias-label">メモ</label>
+      <input class="iias-input" type="text" id="regular-memo" placeholder="確認用メモ" />
+      <button class="iias-btn" style="width: 100%;" onclick="addRegularItem()">登録</button>
+      ${message ? `<p class="iias-message">${message}</p>` : ''}
+    </div>
+    <div class="iias-shopping-list">
+      ${regularItems.length === 0 ? '<div class="iias-card" style="opacity: 0.7;">定番商品がありません。</div>' : ''}
+      ${regularItems.map((item) => `
+        <div class="iias-card" style="display: flex; align-items: center; gap: 1rem;">
+          <div style="flex: 1;">
+            <h3 class="iias-card-title">${item.name}</h3>
+            ${item.price ? `<p class="iias-card-meta">${item.price} 円</p>` : ''}
+            ${item.memo ? `<p class="iias-card-meta">${item.memo}</p>` : ''}
+          </div>
+          <button class="iias-btn" onclick="addRegularToShopping(${item.id})">購買リストに追加</button>
+        </div>
+      `).join('')}
+    </div>
+  `
+}
+
+function bindRegular() {
+  // onclick handlers are used instead
+}
+
 function renderSettings() {
   return `
     <header class="iias-header">
@@ -415,6 +459,9 @@ function setPage(p: typeof page) {
   page = p
   if (page === 'stats') {
     loadShoppingStats().then(() => render())
+  }
+  if (page === 'regular') {
+    loadRegularItems().then(() => render())
   }
   render()
 }
@@ -482,6 +529,37 @@ async function addShoppingItem() {
   }
 }
 
+async function addRegularItem() {
+  const name = (document.getElementById('regular-name') as HTMLInputElement).value
+  const price = (document.getElementById('regular-price') as HTMLInputElement).value
+  const memo = (document.getElementById('regular-memo') as HTMLInputElement).value
+  if (!name) return
+  try {
+    await apiPost('/regular-items', {
+      name,
+      price: price ? parseInt(price, 10) : undefined,
+      memo: memo || undefined,
+    })
+    message = '登録しました'
+    await loadRegularItems()
+    render()
+  } catch (e: any) {
+    message = '登録に失敗しました'
+    render()
+  }
+}
+
+async function addRegularToShopping(id: number) {
+  try {
+    await apiPost(`/regular-items/${id}/add-to-shopping`)
+    message = '購買リストに追加しました'
+    render()
+  } catch (e: any) {
+    message = '追加に失敗しました'
+    render()
+  }
+}
+
 async function saveBudgetFromForm() {
   const budget = (document.getElementById('budget-input') as HTMLInputElement).value
   try {
@@ -499,7 +577,7 @@ async function saveBudgetFromForm() {
   }
 }
 
-Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, setShoppingTab, logout, saveSettingsFromForm, saveBudgetFromForm, addShoppingItem, handleImageSelect })
+Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, setShoppingTab, logout, saveSettingsFromForm, saveBudgetFromForm, addRegularItem, addRegularToShopping, addShoppingItem, handleImageSelect })
 
 async function init() {
   await loadUser()
