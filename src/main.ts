@@ -13,6 +13,7 @@ let viewMode: string = 'dashboard'
 let message = ''
 let searchTimer: any = undefined
 let selectedImageFile: File | null = null
+let shoppingTab: 'active' | 'purchased' = 'active'
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -108,8 +109,9 @@ async function loadArchives(search = '') {
   viewMode = settings.view_mode || 'dashboard'
 }
 
-async function loadShopping() {
-  shoppingItems = await apiGet<any[]>('/shopping-items?status=active')
+async function loadShopping(status = shoppingTab) {
+  shoppingItems = await apiGet<any[]>(`/shopping-items?status=${status}`)
+  shoppingTab = status as 'active' | 'purchased'
 }
 
 async function loadSettings() {
@@ -119,14 +121,19 @@ async function loadSettings() {
 
 async function purchaseItem(id: number) {
   await apiPost(`/shopping-items/${id}`, { status: 'purchased', _method: 'PUT' })
-  await loadShopping()
+  await loadShopping('active')
   render()
 }
 
 async function restoreItem(id: number) {
-  await apiPost(`/shopping-items/${id}`, { status: 'active', _method: 'PUT' })
-  await loadShopping()
+  await apiPost(`/shopping-items/${id}/restore`)
+  await loadShopping('purchased')
   render()
+}
+
+function setShoppingTab(tab: 'active' | 'purchased') {
+  shoppingTab = tab
+  loadShopping(tab).then(() => render())
 }
 
 async function saveSettings(viewModeValue: string, syncInterval: string) {
@@ -262,6 +269,12 @@ function renderShopping() {
     <header class="iias-header">
       <h2 class="iias-title">購買リスト</h2>
     </header>
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+      <button class="iias-btn" style="flex: 1; ${shoppingTab === 'active' ? 'background: rgba(255,138,28,0.2);' : ''}" onclick="setShoppingTab('active')">購入前</button>
+      <button class="iias-btn" style="flex: 1; ${shoppingTab === 'purchased' ? 'background: rgba(255,138,28,0.2);' : ''}" onclick="setShoppingTab('purchased')">購入済み</button>
+    </div>
+
+    ${shoppingTab === 'active' ? `
     <div class="iias-card iias-form" style="margin-bottom: 1rem;">
       <h3 class="iias-card-title">アイテム追加</h3>
       <label class="iias-label">商品名</label>
@@ -272,7 +285,7 @@ function renderShopping() {
       <label class="iias-label">メモ</label>
       <input class="iias-input" type="text" id="item-memo" placeholder="確認用メモ" />
       <button class="iias-btn" style="width: 100%;" onclick="addShoppingItem()">追加</button>
-    </div>
+    </div>` : ''}
     <div class="iias-shopping-list">
       ${shoppingItems.length === 0 ? '<div class="iias-card" style="opacity: 0.7;">アイテムがありません。</div>' : ''}
       ${shoppingItems.map((item) => `
@@ -283,7 +296,7 @@ function renderShopping() {
             ${item.image_path ? `<img src="${item.image_path}" alt="" style="max-width: 120px; max-height: 80px; margin-top: 0.5rem; border: 1px solid #ff8a1c;" />` : ''}
           </div>
           ${item.status === 'purchased'
-            ? `<button class="iias-btn" onclick="restoreItem(${item.id})">取り消し</button>`
+            ? `<button class="iias-btn" onclick="restoreItem(${item.id})">再アクティブ化</button>`
             : `<button class="iias-btn" onclick="purchaseItem(${item.id})">購入</button>`}
         </div>
       `).join('')}
@@ -398,7 +411,8 @@ async function addShoppingItem() {
       status: 'active',
     })
     message = ''
-    await loadShopping()
+    await loadShopping('active')
+    shoppingTab = 'active'
     render()
   } catch (e: any) {
     message = '追加に失敗しました'
@@ -406,7 +420,7 @@ async function addShoppingItem() {
   }
 }
 
-Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, logout, saveSettingsFromForm, addShoppingItem, handleImageSelect })
+Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, setShoppingTab, logout, saveSettingsFromForm, addShoppingItem, handleImageSelect })
 
 async function init() {
   await loadUser()
