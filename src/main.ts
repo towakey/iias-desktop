@@ -16,6 +16,7 @@ let selectedImageFile: File | null = null
 let shoppingTab: 'active' | 'purchased' = 'active'
 let shoppingStats: any = null
 let regularItems: any[] = []
+let tauriNotify: (title: string, body: string) => void = () => {}
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -128,6 +129,7 @@ async function loadSettings() {
 async function purchaseItem(id: number) {
   await apiPost(`/shopping-items/${id}`, { status: 'purchased', _method: 'PUT' })
   await loadShopping('active')
+  tauriNotify('IIAS', '購入しました')
   render()
 }
 
@@ -520,6 +522,7 @@ async function addShoppingItem() {
       status: 'active',
     })
     message = ''
+    tauriNotify('IIAS', '購買リストに追加しました')
     await loadShopping('active')
     shoppingTab = 'active'
     render()
@@ -553,6 +556,7 @@ async function addRegularToShopping(id: number) {
   try {
     await apiPost(`/regular-items/${id}/add-to-shopping`)
     message = '購買リストに追加しました'
+    tauriNotify('IIAS', '定番商品を購買リストに追加しました')
     render()
   } catch (e: any) {
     message = '追加に失敗しました'
@@ -579,8 +583,33 @@ async function saveBudgetFromForm() {
 
 Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, setShoppingTab, logout, saveSettingsFromForm, saveBudgetFromForm, addRegularItem, addRegularToShopping, addShoppingItem, handleImageSelect })
 
+async function initTauriFeatures() {
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const window = getCurrentWebviewWindow()
+    const { register } = await import('@tauri-apps/plugin-global-shortcut')
+    await register('CmdOrCtrl+Shift+I', async () => {
+      await window.show()
+      await window.setFocus()
+    })
+    const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification')
+    const granted = await isPermissionGranted()
+    if (!granted) {
+      const permission = await requestPermission()
+      tauriNotify = (title: string, body: string) => {
+        if (permission === 'granted') sendNotification({ title, body })
+      }
+    } else {
+      tauriNotify = (title: string, body: string) => sendNotification({ title, body })
+    }
+  } catch {
+    tauriNotify = () => {}
+  }
+}
+
 async function init() {
   await loadUser()
+  if (user) await initTauriFeatures()
   render()
 }
 
