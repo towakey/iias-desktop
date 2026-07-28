@@ -155,7 +155,7 @@ function render() {
       <h1 class="iias-logo">IIAS</h1>
       <nav class="iias-nav">
         <a class="iias-nav-link ${page === 'timeline' ? 'active' : ''}" onclick="setPage('timeline')">タイムライン</a>
-        <a class="iias-nav-link ${page === 'shopping' ? 'active' : ''}" onclick="setPage('shopping')">買い物リスト</a>
+        <a class="iias-nav-link ${page === 'shopping' ? 'active' : ''}" onclick="setPage('shopping')">購買リスト</a>
         <a class="iias-nav-link ${page === 'settings' ? 'active' : ''}" onclick="setPage('settings')">設定</a>
       </nav>
       <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid #ff8a1c;">
@@ -240,7 +240,7 @@ function bindTimeline() {
 function renderShopping() {
   return `
     <header class="iias-header">
-      <h2 class="iias-title">買い物リスト</h2>
+      <h2 class="iias-title">購買リスト</h2>
     </header>
     <div class="iias-shopping-list">
       ${shoppingItems.length === 0 ? '<div class="iias-card" style="opacity: 0.7;">アイテムがありません。</div>' : ''}
