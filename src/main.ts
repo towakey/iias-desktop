@@ -8,12 +8,13 @@ let user: { id: number; name: string; email: string } | null = null
 let archives: any[] = []
 let shoppingItems: any[] = []
 let settings: Record<string, any> = {}
-let page: 'timeline' | 'shopping' | 'settings' = 'timeline'
+let page: 'timeline' | 'shopping' | 'stats' | 'settings' = 'timeline'
 let viewMode: string = 'dashboard'
 let message = ''
 let searchTimer: any = undefined
 let selectedImageFile: File | null = null
 let shoppingTab: 'active' | 'purchased' = 'active'
+let shoppingStats: any = null
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -187,6 +188,7 @@ function render() {
       <nav class="iias-nav">
         <a class="iias-nav-link ${page === 'timeline' ? 'active' : ''}" onclick="setPage('timeline')">タイムライン</a>
         <a class="iias-nav-link ${page === 'shopping' ? 'active' : ''}" onclick="setPage('shopping')">購買リスト</a>
+        <a class="iias-nav-link ${page === 'stats' ? 'active' : ''}" onclick="setPage('stats')">統計</a>
         <a class="iias-nav-link ${page === 'settings' ? 'active' : ''}" onclick="setPage('settings')">設定</a>
       </nav>
       <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid #ff8a1c;">
@@ -197,12 +199,14 @@ function render() {
     <main class="iias-main">
       ${page === 'timeline' ? renderTimeline() : ''}
       ${page === 'shopping' ? renderShopping() : ''}
+      ${page === 'stats' ? renderStats() : ''}
       ${page === 'settings' ? renderSettings() : ''}
     </main>
   `
 
   if (page === 'timeline') bindTimeline()
   if (page === 'shopping') bindShopping()
+  if (page === 'stats') bindStats()
   if (page === 'settings') bindSettings()
 }
 
@@ -283,6 +287,8 @@ function renderShopping() {
       <h3 class="iias-card-title">アイテム追加</h3>
       <label class="iias-label">商品名</label>
       <input class="iias-input" type="text" id="item-name" placeholder="例：牛乳 1L" />
+      <label class="iias-label">価格（円）</label>
+      <input class="iias-input" type="number" id="item-price" placeholder="例：200" />
       <label class="iias-label">画像</label>
       <input class="iias-input" type="file" id="item-image" accept="image/*" onchange="handleImageSelect(event)" />
       <img id="image-preview" alt="" style="display: none; max-width: 120px; max-height: 80px; margin-top: 0.5rem; border: 1px solid #ff8a1c;" />
@@ -296,6 +302,7 @@ function renderShopping() {
         <div class="iias-card" style="display: flex; align-items: center; gap: 1rem; ${item.status === 'purchased' ? 'opacity: 0.35;' : ''}">
           <div style="flex: 1;">
             <h3 class="iias-card-title">${item.name}</h3>
+            ${item.price ? `<p class="iias-card-meta">${item.price} 円</p>` : ''}
             ${item.memo ? `<p class="iias-card-meta">${item.memo}</p>` : ''}
             ${item.image_path ? `<img src="${item.image_path}" alt="" style="max-width: 120px; max-height: 80px; margin-top: 0.5rem; border: 1px solid #ff8a1c;" />` : ''}
           </div>
@@ -309,6 +316,44 @@ function renderShopping() {
 }
 
 function bindShopping() {
+  // onclick handlers are used instead
+}
+
+function renderStats() {
+  const alert = shoppingStats?.budget_alert ? '<p style="color: #ff4444;">予算超過アラート</p>' : ''
+  const byNameEntries = shoppingStats?.by_name ? Object.entries(shoppingStats.by_name) : []
+  const byNameHtml = byNameEntries.map(([name, s]: [string, any]) => `
+    <div class="iias-card">
+      <h3 class="iias-card-title">${name}</h3>
+      <p class="iias-card-meta">購入回数: ${s.count}</p>
+      <p class="iias-card-meta">最終購入: ${s.last_purchased_at ? formatDate(s.last_purchased_at) : '-'}</p>
+      <p class="iias-card-meta">平均間隔: ${s.avg_interval_days != null ? `${s.avg_interval_days} 日` : '-'}</p>
+    </div>
+  `).join('')
+
+  return `
+    <header class="iias-header">
+      <h2 class="iias-title">購買統計</h2>
+    </header>
+    <div class="iias-card" style="margin-bottom: 1rem;">
+      <h3 class="iias-card-title">今月の状況</h3>
+      <p class="iias-card-meta">今月合計: ${shoppingStats?.total_this_month ?? 0} 円</p>
+      <p class="iias-card-meta">予算: ${shoppingStats?.monthly_budget ?? 0} 円</p>
+      ${alert}
+    </div>
+    <div class="iias-card iias-form" style="margin-bottom: 1rem;">
+      <h3 class="iias-card-title">月次予算設定</h3>
+      <label class="iias-label">予算（円）</label>
+      <input class="iias-input" type="number" id="budget-input" value="${shoppingStats?.monthly_budget ?? 0}" />
+      <button class="iias-btn" style="width: 100%;" onclick="saveBudgetFromForm()">保存</button>
+      ${message ? `<p class="iias-message">${message}</p>` : ''}
+    </div>
+    <h3 class="iias-card-title" style="margin-bottom: 0.5rem;">商品別統計</h3>
+    ${byNameHtml || '<div class="iias-card" style="opacity: 0.7;">購入済みアイテムがありません。</div>'}
+  `
+}
+
+function bindStats() {
   // onclick handlers are used instead
 }
 
@@ -358,8 +403,19 @@ async function handleLogin() {
   }
 }
 
+async function loadShoppingStats() {
+  try {
+    shoppingStats = await apiGet('/shopping-items/stats')
+  } catch (e) {
+    shoppingStats = null
+  }
+}
+
 function setPage(p: typeof page) {
   page = p
+  if (page === 'stats') {
+    loadShoppingStats().then(() => render())
+  }
   render()
 }
 
@@ -400,6 +456,7 @@ function handleImageSelect(e: Event) {
 
 async function addShoppingItem() {
   const name = (document.getElementById('item-name') as HTMLInputElement).value
+  const price = (document.getElementById('item-price') as HTMLInputElement).value
   const memo = (document.getElementById('item-memo') as HTMLInputElement).value
   if (!name) return
   try {
@@ -410,6 +467,7 @@ async function addShoppingItem() {
     }
     await apiPost('/shopping-items', {
       name,
+      price: price ? parseInt(price, 10) : undefined,
       image_path: imagePath,
       memo: memo || undefined,
       status: 'active',
@@ -424,7 +482,24 @@ async function addShoppingItem() {
   }
 }
 
-Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, setShoppingTab, logout, saveSettingsFromForm, addShoppingItem, handleImageSelect })
+async function saveBudgetFromForm() {
+  const budget = (document.getElementById('budget-input') as HTMLInputElement).value
+  try {
+    await apiPost('/settings', {
+      settings: [
+        { key: 'monthly_budget_amount', value: parseInt(budget, 10) || 0, type: 'integer' },
+      ],
+    })
+    message = '保存しました'
+    await loadShoppingStats()
+    render()
+  } catch (e: any) {
+    message = '保存に失敗しました'
+    render()
+  }
+}
+
+Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, setShoppingTab, logout, saveSettingsFromForm, saveBudgetFromForm, addShoppingItem, handleImageSelect })
 
 async function init() {
   await loadUser()
