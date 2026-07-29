@@ -2,8 +2,10 @@ import './styles.css'
 
 const API_BASE_URL = 'http://localhost:8000/api'
 const TOKEN_KEY = 'iias_token'
+const REFRESH_TOKEN_KEY = 'iias_refresh_token'
 
 let token: string | null = localStorage.getItem(TOKEN_KEY)
+let refreshToken: string | null = localStorage.getItem(REFRESH_TOKEN_KEY)
 let user: { id: number; name: string; email: string } | null = null
 let archives: any[] = []
 let shoppingItems: any[] = []
@@ -18,48 +20,122 @@ let shoppingStats: any = null
 let regularItems: any[] = []
 let tauriNotify: (title: string, body: string) => void = () => {}
 
-async function apiGet<T>(path: string): Promise<T> {
+let isRefreshing = false
+let refreshQueue: Array<(t: string) => void> = []
+
+type RefreshResponse = { access_token: string; token: string; refresh_token: string; expires_in: number }
+
+function authHeaders(contentType = true, authToken: string | null = token): Record<string, string> {
+  const h: Record<string, string> = {
+    Accept: 'application/json',
+    'X-Service': 'iias-desktop',
+  }
+  if (contentType) {
+    h['Content-Type'] = 'application/json'
+  }
+  if (authToken) {
+    h.Authorization = `Bearer ${authToken}`
+  }
+  return h
+}
+
+async function doRefresh(): Promise<string> {
+  if (!refreshToken) {
+    throw new Error('No refresh token')
+  }
+
+  if (isRefreshing) {
+    return new Promise((resolve) => {
+      refreshQueue.push(resolve)
+    })
+  }
+
+  isRefreshing = true
+  try {
+    const res = await fetch(`${API_BASE_URL}/refresh`, {
+      method: 'POST',
+      headers: authHeaders(true, refreshToken),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const data: RefreshResponse = await res.json()
+    token = data.access_token || data.token
+    refreshToken = data.refresh_token
+    localStorage.setItem(TOKEN_KEY, token!)
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+    refreshQueue.forEach((resolve) => resolve(token!))
+    return token!
+  } finally {
+    isRefreshing = false
+    refreshQueue = []
+  }
+}
+
+async function requestWithRetry<T>(path: string, options: RequestInit): Promise<T> {
+  const baseHeaders = authHeaders((options.headers as any)?.['Content-Type'] !== undefined)
   const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
     headers: {
-      Accept: 'application/json',
-      'X-Service': 'iias-desktop',
-      Authorization: token ? `Bearer ${token}` : '',
-    },
+      ...baseHeaders,
+      ...((options.headers as any) || {}),
+    } as any,
   })
+  if (res.status === 401 && refreshToken) {
+    await doRefresh()
+    const retry = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        ...baseHeaders,
+        ...((options.headers as any) || {}),
+        Authorization: `Bearer ${token || ''}`,
+      } as any,
+    })
+    if (!retry.ok) throw new Error(await retry.text())
+    return retry.json()
+  }
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
 
+async function apiGet<T>(path: string): Promise<T> {
+  return requestWithRetry<T>(path, { headers: authHeaders() })
+}
+
 async function apiPost<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  return requestWithRetry<T>(path, {
     method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'X-Service': 'iias-desktop',
-      Authorization: token ? `Bearer ${token}` : '',
-    },
     body: body ? JSON.stringify(body) : undefined,
+    headers: authHeaders(),
   })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
 }
 
 async function uploadImage(file: File): Promise<string> {
   const formData = new FormData()
   formData.append('image', file)
-  const res = await fetch(`${API_BASE_URL}/images`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'X-Service': 'iias-desktop',
-      Authorization: token ? `Bearer ${token}` : '',
-    },
-    body: formData,
-  })
-  if (!res.ok) throw new Error(await res.text())
-  const data: { url: string } = await res.json()
-  return data.url
+
+  const doUpload = async (auth: string | null) => {
+    const res = await fetch(`${API_BASE_URL}/images`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'X-Service': 'iias-desktop',
+        Authorization: auth ? `Bearer ${auth}` : '',
+      },
+      body: formData,
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const data: { url: string } = await res.json()
+    return data.url
+  }
+
+  try {
+    return await doUpload(token)
+  } catch (e: any) {
+    if (refreshToken) {
+      await doRefresh()
+      return await doUpload(token)
+    }
+    throw e
+  }
 }
 
 function bodyPreview(body: string | null): string {
@@ -83,11 +159,13 @@ async function fetchArchiveBody(id: number) {
 async function login(email: string, password: string) {
   console.log('login called', email)
   try {
-    const data = await apiPost<{ user: typeof user; token: string }>('/login', { email, password })
+    const data = await apiPost<{ user: typeof user; token: string; access_token: string; refresh_token: string }>('/login', { email, password })
     console.log('login success', data)
-    token = data.token
+    token = data.access_token || data.token
+    refreshToken = data.refresh_token
     user = data.user
-    localStorage.setItem(TOKEN_KEY, token)
+    localStorage.setItem(TOKEN_KEY, token!)
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
     message = ''
     await loadData()
     render()
@@ -102,8 +180,10 @@ async function logout() {
     await apiPost('/logout')
   } catch {}
   token = null
+  refreshToken = null
   user = null
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
   page = 'timeline'
   render()
 }
@@ -115,8 +195,10 @@ async function loadUser() {
     await loadData()
   } catch {
     token = null
+    refreshToken = null
     user = null
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
   }
 }
 
