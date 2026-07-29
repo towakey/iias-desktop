@@ -124,6 +124,16 @@ body {
   background: rgba(255, 138, 28, 0.15);
 }
 
+.iias-body-preview {
+  color: #ccc;
+  line-height: 1.4;
+}
+
+.iias-body-preview::before {
+  content: '本文: ';
+  color: #888;
+}
+
 .iias-input {
   padding: 0.5rem 0.75rem;
   background: #000;

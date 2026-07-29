@@ -62,6 +62,24 @@ async function uploadImage(file: File): Promise<string> {
   return data.url
 }
 
+function bodyPreview(body: string | null): string {
+  if (!body) return ''
+  return body.length > 160 ? body.slice(0, 160) + '…' : body
+}
+
+async function fetchArchiveBody(id: number) {
+  try {
+    const updated = await apiPost<any>(`/archives/${id}/fetch-body`)
+    const item = archives.find((a) => a.id === id)
+    if (item) {
+      item.body = updated.body
+      render()
+    }
+  } catch (e) {
+    console.error('fetch body failed', e)
+  }
+}
+
 async function login(email: string, password: string) {
   console.log('login called', email)
   try {
@@ -170,13 +188,19 @@ function archiveItem(item: any) {
   const tags = Array.isArray(item.tags) && item.tags.length
     ? `<p class="iias-card-meta">タグ: ${item.tags.map((t: any) => t.name).join(', ')}</p>`
     : ''
+  const preview = bodyPreview(item.body)
+  const fetchBtn = item.url && !item.body
+    ? `<button class="iias-btn" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; margin-top: 0.4rem;" onclick="fetchArchiveBody(${item.id})">本文取得</button>`
+    : ''
   return `
     <div class="iias-card">
       <h3 class="iias-card-title">${item.title || '(タイトルなし)'}</h3>
       ${item.url ? `<p class="iias-card-meta">${item.url}</p>` : ''}
+      ${preview ? `<p class="iias-card-meta iias-body-preview">${preview}</p>` : ''}
       ${item.memo ? `<p class="iias-card-meta">${item.memo}</p>` : ''}
       ${tags}
       <p class="iias-card-meta">${formatDate(item.recorded_at)}</p>
+      ${fetchBtn}
     </div>
   `
 }
@@ -581,7 +605,7 @@ async function saveBudgetFromForm() {
   }
 }
 
-Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, setShoppingTab, logout, saveSettingsFromForm, saveBudgetFromForm, addRegularItem, addRegularToShopping, addShoppingItem, handleImageSelect })
+Object.assign(window, { hlogin: handleLogin, setPage, searchArchives, purchaseItem, restoreItem, setShoppingTab, logout, saveSettingsFromForm, saveBudgetFromForm, addRegularItem, addRegularToShopping, addShoppingItem, handleImageSelect, fetchArchiveBody })
 
 async function initTauriFeatures() {
   try {
